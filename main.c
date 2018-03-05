@@ -45,6 +45,9 @@
 
 #define MAILBOX_LENGTH 1
 #define MESSAGE_SIZE sizeof(time_msg_t)
+#define PRESET_SEC 59
+#define PRESET_MIN 59
+#define PRESET_HOUR 23
 
 typedef enum
 {
@@ -72,7 +75,7 @@ QueueHandle_t mailbox;
 void countSec_task(void * pvParameters)
 {
 	TickType_t xLastWakeTime;
-	static time_msg_t seconds = {seconds_type, 59};
+	static time_msg_t seconds = {seconds_type, PRESET_SEC};
 
 	const TickType_t xPeriod = pdMS_TO_TICKS(1000);
 
@@ -86,8 +89,9 @@ void countSec_task(void * pvParameters)
 			xSemaphoreGive(	sem_minutes );
 		}
 		xQueueSendToBack(mailbox, &seconds, portMAX_DELAY);
-		vTaskDelayUntil(&xLastWakeTime, xPeriod);
 		seconds.value++;
+		vTaskDelayUntil(&xLastWakeTime, xPeriod);
+
 	}
 
 
@@ -95,7 +99,7 @@ void countSec_task(void * pvParameters)
 
 void countMin_task(void * pvParameters)
 {
-	static time_msg_t minutes = {minutes_type, 59};
+	static time_msg_t minutes = {minutes_type, PRESET_MIN};
 
 	sem_minutes = xSemaphoreCreateBinary();
 
@@ -123,7 +127,7 @@ void countMin_task(void * pvParameters)
 
 void countHour_task(void * pvParameters)
 {
-	static time_msg_t hours = {hours_type, 23};
+	static time_msg_t hours = {hours_type, PRESET_HOUR};
 	sem_hours = xSemaphoreCreateBinary();
 
 	for(;;)
@@ -143,15 +147,16 @@ void countHour_task(void * pvParameters)
 void print_task(void * pvParameters)
 {
 
-	static uint8_t segundo = 59;
-	static uint8_t minuto = 59;
-	static uint8_t hora = 23;
+	static uint8_t segundo = PRESET_SEC;
+	static uint8_t minuto = PRESET_MIN;
+	static uint8_t hora = PRESET_HOUR;
 	time_msg_t xmessage;
 
 	for(;;)
 	{
 
 		xQueueReceive(mailbox, &xmessage, portMAX_DELAY);
+
 		if(seconds_type == xmessage.time_type)
 		{
 			segundo = xmessage.value;
@@ -166,6 +171,7 @@ void print_task(void * pvParameters)
 		{
 			hora = xmessage.value;
 		}
+
 
 		if(10 <= hora && 10 <= minuto && 10 <= segundo)
 		{
