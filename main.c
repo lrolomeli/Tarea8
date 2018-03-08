@@ -42,12 +42,22 @@
 #include "freeRTOS.h"
 #include "task.h"
 #include "semphr.h"
+#include "event_groups.h"
 
 #define MAILBOX_LENGTH 1
 #define MESSAGE_SIZE sizeof(time_msg_t)
 #define PRESET_SEC 59
 #define PRESET_MIN 59
 #define PRESET_HOUR 23
+
+#define ALARM_SECONDS 6
+#define ALARM_MINUTES 0
+#define ALARM_HOURS 0
+
+#define EVENT_ALARM_SECONDS (1 << 0)
+#define EVENT_ALARM_MINUTES (1 << 1)
+#define EVENT_ALARM_HOURS 	(1 << 2)
+
 
 typedef enum
 {
@@ -68,7 +78,7 @@ typedef struct
 SemaphoreHandle_t sem_minutes;
 SemaphoreHandle_t sem_hours;
 QueueHandle_t mailbox;
-
+EventGroupHandle_t time_events_g;
 /**************************************************
  * TASKS
  *************************************************/
@@ -83,6 +93,13 @@ void countSec_task(void * pvParameters)
 
 	for(;;)
 	{
+		if(ALARM_SECONDS == seconds.value)
+		{
+			//xEventGroupSetBits(xEventGroup, uxBitsToSet);
+			xEventGroupSetBits(time_events_g, EVENT_ALARM_SECONDS);
+
+		}
+
 		if(60 == seconds.value)
 		{
 			seconds.value = 0;
@@ -105,8 +122,16 @@ void countMin_task(void * pvParameters)
 
 	for(;;)
 	{
+
+		if(ALARM_MINUTES == minutes.value)
+		{
+			//xEventGroupSetBits(xEventGroup, uxBitsToSet);
+			xEventGroupSetBits(time_events_g, EVENT_ALARM_MINUTES);
+		}
 		xSemaphoreTake( sem_minutes, portMAX_DELAY );
 		minutes.value++;
+
+
 		if(60 == minutes.value)
 		{
 			minutes.value = 0;
@@ -117,6 +142,8 @@ void countMin_task(void * pvParameters)
 		{
 			xQueueSendToBack(mailbox, &minutes, portMAX_DELAY);
 		}
+
+
 
 
 
@@ -132,16 +159,30 @@ void countHour_task(void * pvParameters)
 
 	for(;;)
 	{
+		if(ALARM_HOURS == hours.value)
+		{
+			//xEventGroupSetBits(xEventGroup, uxBitsToSet);
+			xEventGroupSetBits(time_events_g, EVENT_ALARM_HOURS);
+		}
 		xSemaphoreTake( sem_hours, portMAX_DELAY );
 		hours.value++;
+
 		hours.value = (24 == hours.value) ? 0 : hours.value;
 		xQueueSendToBack(mailbox, &hours, portMAX_DELAY);
-
-
 
 	}
 
 
+}
+void alarm_task(void * pvParameters)
+{
+	for(;;)
+	{
+		//xEventGroupWaitBits(xEventGroup, uxBitsToWaitFor, xClearOnExit, xWaitForAllBits, xTicksToWait);
+		xEventGroupWaitBits(time_events_g, EVENT_ALARM_SECONDS|EVENT_ALARM_MINUTES|EVENT_ALARM_HOURS, pdTRUE, pdTRUE, portMAX_DELAY);
+
+		PRINTF("alarm");
+	}
 }
 
 void print_task(void * pvParameters)
@@ -223,15 +264,18 @@ int main(void) {
   	/* Init FSL debug console. */
     BOARD_InitDebugConsole();
 
-	xTaskCreate(countSec_task, "sec", 110, (void *) 0, 3, NULL);
-	xTaskCreate(countMin_task, "min", 110, (void *) 0, 2, NULL);
-	xTaskCreate(countHour_task, "hour", 110, (void *) 0, 1, NULL);
+	xTaskCreate(countSec_task, "sec", 110, (void *) 0, 4, NULL);
+	xTaskCreate(countMin_task, "min", 110, (void *) 0, 3, NULL);
+	xTaskCreate(countHour_task, "hour", 110, (void *) 0, 2, NULL);
+	xTaskCreate(alarm_task, "alarm", 110, (void *) 0, 1, NULL);
 	xTaskCreate(print_task, "print", 110, (void *) 0, 0, NULL);
 
 	sem_minutes = xSemaphoreCreateBinary();
 	sem_hours = xSemaphoreCreateBinary();
 
 	mailbox = xQueueCreate(MAILBOX_LENGTH, MESSAGE_SIZE);
+
+	time_events_g = xEventGroupCreate();
 
 	vTaskStartScheduler();
 
